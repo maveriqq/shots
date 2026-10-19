@@ -251,6 +251,8 @@ p.sub b{color:var(--tx);font-weight:500}
   .gauge{top:auto;bottom:220px}.gauge .v{font-size:54px}.ruler,.scrim.sl,.scrim.sr,.hint{display:none}
   #trip{left:16px;right:16px;max-width:none}#trip h2{font-size:22px}
 }
+html.film,html.film *{cursor:none!important}
+html.film .hint,html.film #chips .chip.lm{display:none!important}
 html.noblur *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
@@ -900,12 +902,12 @@ function chase(back, up, side, ahead, down) {
 }
 function rig() {
   const m = S.mode, ph = S.phase, sx = 32 * W / 1440;
-  if (m === 'drive' && S.drive.leg === 'origin') { const c = chase(11, 4.2, 1.2, 10, -1); return { ...c, fov: 40, ox: 0 }; }
+  if (m === 'drive' && S.drive.leg === 'origin') { const c = chase(10, 3.4, .9, 2.2, -.5); return { ...c, fov: 40, ox: 0 }; }
   if (m === 'lift' && ph !== 'takeoff') return { p: LIFT_OFF.clone(), t: LIFT_T.clone(), fov: 25, ox: -sx };
   if (ph === 'takeoff' || m === 'flight') {
     /* the camera rises with the car (the pad drops away below), then swings behind it */
     const y = car.position.y, e = sm(30, 320, y), et = sm(140, 430, y);
-    const c = chase(20.5, 7.4, 2.4, 80, 9), cp = car.position;
+    const c = chase(14.5, 5.2, 1.6, 60, 6.5), cp = car.position;
     const lp = cp.clone().add(LIFT_OFF), lt = cp.clone().add(LIFT_T);
     return { p: lp.lerp(c.p, e), t: lt.lerp(c.t, et), fov: mix(25, 46, e), ox: mix(-sx, 0, e) };
   }
@@ -918,7 +920,7 @@ function rig() {
   }
   if (m === 'drive' && S.drive.leg === 'dest') {
     if (S.phase === 'landed') { const pad = car.position; return { p: pad.clone().add(LIFT_OFF), t: pad.clone().add(LIFT_T), fov: 25, ox: -sx }; }
-    const c = chase(11, 4.2, 1.2, 10, -1); return { ...c, fov: 40, ox: 0 };
+    const c = chase(10, 3.4, .9, 2.2, -.5); return { ...c, fov: 40, ox: 0 };
   }
   return { p: cam.position.clone(), t: camT.clone(), fov: cam.fov, ox: 0 };
 }
@@ -1170,6 +1172,7 @@ function renderFlightDock() {
   const bc = $('#bConf'); if (bc) bc.onclick = () => enterLand();
 }
 function flightUpdate(dt) {
+  dt *= FILM.ts;
   const F = S.fly; if (!F.active || S.mode === 'land' || S.mode === 'drive') return;
   const s = F.s;
   const vt = s < 30 ? 6.5 : s < 1000 ? mix(6.5, 240, sm(30, 1000, s)) : s > S_APP ? mix(240, 30, sm(S_APP, FPL, s)) : 240;
@@ -1287,12 +1290,55 @@ function presetLand() {
 $$('.modes button').forEach(b => b.onclick = () => ({ drive: resetAll, lift: presetLift, flight: presetFlight, land: presetLand })[b.dataset.m]());
 /* demo mode for recording: R restarts, 1-4 jump to Drive, Lift, Flight, Land */
 addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  const k = e.key.toLowerCase(); const jump = { r: resetAll, 1: resetAll, 2: presetLift, 3: presetFlight, 4: presetLand }[k]; if (jump) { e.preventDefault(); jump(); } });
+  const k = e.key.toLowerCase(); if (k === 'f') { e.preventDefault(); filmStart(); return; } if (k === 'escape' && FILM.on) { filmStop(); return; }
+  if (FILM.on) filmStop();
+  const jump = { r: resetAll, 1: resetAll, 2: presetLift, 3: presetFlight, 4: presetLand }[k]; if (jump) { e.preventDefault(); jump(); } });
 
 /* intro choreography */
 function playIntro() {
   const order = ['.top', '#left', '#right', '#dock'];
   order.forEach((s, i) => { const e = $(s); if (!e || RM) return; e.animate([{ opacity: 0, transform: 'translateY(10px)', filter: 'blur(6px)' }, { opacity: 1, transform: 'none', filter: 'none' }], { duration: 700, delay: 150 + i * 110, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }); });
+}
+
+/* ================= film mode (F): a fixed 15 s take for recording ================= */
+const FILM = { on: false, t: 0, ts: 1, step: 0, zoom: 1 };
+const filmShade = (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:50;transition:opacity .6s'; document.body.appendChild(d); return d; })();
+/* close-up: the ignition sits in the middle of the frame; as z returns to 1 it slides back into the dock */
+const FILM_Z = 2.3;
+function filmZoom(z) { FILM.zoom = z; if (z <= 1.0001) { document.body.style.transform = ''; return; }
+  const k = (z - 1) / (FILM_Z - 1), cx = mix(FILM.ox, W / 2, k), cy = mix(FILM.oy, H * .52, k);
+  document.body.style.transformOrigin = '0 0'; document.body.style.transform = `translate(${cx - FILM.ox * z}px,${cy - FILM.oy * z}px) scale(${z})`; }
+function filmStart() {
+  RUN++; DESC = null; FILM.on = true; FILM.t = 0; FILM.step = 0; FILM.ts = 1; filmShade.style.opacity = 0;
+  document.documentElement.classList.add('film');
+  S.fly = { s: 0, v: 0, active: false }; S.corr = 'C9'; S.liftMin = 32; S.drive.parked = true; S.drive.leg = 'origin';
+  CHECKS.forEach(c => S.chk[c.id] = 'ok'); S.chk.lvl = 'run'; S.chk.arms = 'run'; S.open = {};
+  foldAnim = null; ud.setFold(1); spinTarget = 0; ud.spin(0); padMarks.forEach(r => r.material.opacity = 0);
+  car.position.set(0, 0, 0); car.rotation.set(0, PAD_YAW, 0);
+  setMode('lift'); S.phase = 'checks'; show(['left', 'right', 'dock']); renderLift(true); setClock(14 * 60 + 32); setWhere('Pad SM-04, Santa Monica');
+  updateCam(0, true);
+  const b = $('#dock .ign-btn').getBoundingClientRect(); FILM.ox = b.left + b.width / 2; FILM.oy = b.top + b.height / 2;
+  document.body.style.transition = 'none'; filmZoom(FILM_Z);
+}
+function filmStop() { FILM.on = false; FILM.ts = 1; document.documentElement.classList.remove('film'); document.body.style.transform = ''; filmShade.style.opacity = 0; }
+const easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function filmTick(dt) {
+  if (!FILM.on) return;
+  FILM.t += dt; const t = FILM.t, st = FILM.step;
+  if (st === 0 && t > .5) { S.chk.lvl = 'ok'; renderLift(); FILM.step = 1; }
+  if (st === 1 && t > .95) { S.chk.arms = 'ok'; renderLift(); FILM.step = 2; }
+  if (st === 2 && t > 1.9) { $('#dock .ign').dataset.st = 'hold'; L.dock.classList.add('charging'); FILM.step = 3; FILM.h0 = t; }
+  if (st === 3) { const p = Math.min(1, (t - FILM.h0) / 2.2); setIgn(p); spinTarget = 62 * p; $('#igCap').textContent = p < 1 ? `Spinning up ${Math.round(p * 100)}%` : 'Lifting off';
+    if (p >= 1) { $('#dock .ign').dataset.st = 'go'; L.dock.classList.remove('charging'); doTakeoff(); FILM.step = 4; FILM.z0 = t; } }
+  if (st >= 4 && FILM.z0 != null) { const k = Math.min(1, (t - FILM.z0 - .25) / 1.3); if (k > 0) filmZoom(1 + (FILM_Z - 1) * (1 - easeIO(k))); if (k >= 1) FILM.z0 = null; }
+  if (st >= 4) {
+    const y = car.position.y, s = S.fly.s;
+    const tgt = y < 22 ? 1.6 : y < 440 ? 5.5 : s < S_APP - 900 ? 11 : 6;
+    FILM.ts = mix(FILM.ts, tgt, 1 - Math.exp(-dt * 1.6));
+    if (st === 4 && (S.phase === 'hold' || s >= FPL - 2)) { FILM.step = 5; FILM.e0 = t; }
+  }
+  if (st === 5 && t - FILM.e0 > 1.6) { filmShade.style.opacity = 1; FILM.step = 6; FILM.f0 = t; }
+  if (st === 6 && t - FILM.f0 > .9) { filmStop(); resetAll(); }
 }
 
 /* ================= main loop ================= */
@@ -1311,6 +1357,7 @@ function loop(now) {
 }
 function tick(dt) {
   S.t += dt; const now = performance.now();
+  filmTick(dt);
   // fold animation
   if (foldAnim) { const k = clamp((now - foldAnim.t0) / foldAnim.ms, 0, 1); ud.setFold(mix(foldAnim.from, foldAnim.to, k)); if (k >= 1) foldAnim = null; }
   // rotor speed

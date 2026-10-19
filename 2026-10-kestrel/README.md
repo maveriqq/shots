@@ -29,7 +29,7 @@ A 22.6 mile trip from Santa Monica to Pasadena in 16 minutes instead of 58 on th
 ![Mobile](screenshots/mobile.png)
 
 ## Demo keys
-`R` restart · `1` Drive · `2` Lift · `3` Flight · `4` Land
+`R` restart · `1` Drive · `2` Lift · `3` Flight · `4` Land · `F` film mode (a fixed 20 s take for recording, `Esc` to stop)
 
 ## Details
 Archetype: industry precision, 3D product scene · Fonts: Geist, Geist Mono · Icons: Tabler Icons · 3D: three.js r128, vehicle built in code from orthographic concept views · Palette: #0C0D0C · #E651D8 · #5BD38A · #F0C24B · #A3A6A4
